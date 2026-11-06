@@ -1,0 +1,20 @@
+replicaCount: 1
+image:
+  repository: localhost:5001/__APP_NAME__
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+service:
+  type: NodePort
+  port: 8080
+  nodePort: __NODE_PORT__
+ingress:
+  enabled: true
+  className: nginx
+  host: __INGRESS_HOST__
+resources:
+  requests:
+    cpu: 25m
+    memory: 32Mi
+  limits:
+    cpu: 200m
+    memory: 256Mi

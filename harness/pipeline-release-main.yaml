@@ -1,0 +1,82 @@
+# Release on push to main — creates v* tag only (no stable deploy).
+# Register trigger: GitHub push to branch main.
+# Pair with pipeline-deploy-tag.yaml (trigger: tag v*).
+# Placeholders __APP_NAME__ / __APP_ID__ substituted by scripts/bootstrap.sh.
+pipeline:
+  name: Release __APP_NAME__ Main
+  identifier: Release___APP_ID___Main
+  projectIdentifier: __HARNESS_PROJECT__
+  orgIdentifier: __HARNESS_ORG__
+  tags:
+    app: __APP_NAME__
+    release: semver-main
+  properties:
+    ci:
+      codebase:
+        connectorRef: github_sample_apps
+        repoName: __GITHUB_REPO__
+        build: <+input>
+        depth: 0
+  stages:
+    - stage:
+        name: Release
+        identifier: Release
+        description: Conventional commits → annotated v* tag (+ optional GH Release)
+        type: CI
+        spec:
+          cloneCodebase: true
+          infrastructure:
+            type: KubernetesDirect
+            spec:
+              connectorRef: local_kind_k8s
+              namespace: harness-ci
+              automountServiceAccountToken: true
+              nodeSelector: {}
+              os: Linux
+          execution:
+            steps:
+              - step:
+                  type: Run
+                  name: Guard main branch
+                  identifier: Guard_main_branch
+                  spec:
+                    connectorRef: dockerhub_public
+                    image: alpine:3.20
+                    shell: Sh
+                    command: |-
+                      set -e
+                      BRANCH="<+codebase.branch>"
+                      echo "codebase.branch=${BRANCH}"
+                      if [ "$BRANCH" != "main" ]; then
+                        echo "Release pipeline only runs for main (got ${BRANCH})"
+                        exit 1
+                      fi
+              - step:
+                  type: Run
+                  name: Semver tag release
+                  identifier: Semver_tag_release
+                  spec:
+                    connectorRef: dockerhub_public
+                    image: alpine:3.20
+                    shell: Sh
+                    # Mint a short-lived GitHub App installation token, then tag.
+                    envVariables:
+                      GITHUB_APP_ID: <+secrets.getValue("github_release_app_id")>
+                      GITHUB_APP_PRIVATE_KEY: <+secrets.getValue("github_release_app_private_key")>
+                      GITHUB_APP_OWNER: __GITHUB_OWNER__
+                      GITHUB_REPOSITORY: __GITHUB_REPO__
+                      RELEASE_BRANCH: main
+                      CREATE_GITHUB_RELEASE: "true"
+                    command: |-
+                      set -e
+                      apk add --no-cache git bash python3 openssl curl >/dev/null
+                      chmod +x scripts/mint-github-app-token.sh scripts/harness-semver-release.sh
+                      export GITHUB_TOKEN="$(bash scripts/mint-github-app-token.sh)"
+                      test -n "$GITHUB_TOKEN"
+                      bash scripts/harness-semver-release.sh
+        failureStrategies:
+          - onFailure:
+              errors:
+                - AllErrors
+              action:
+                type: Abort

@@ -1,0 +1,6 @@
+apiVersion: v2
+name: __APP_NAME__
+description: Platform app (tag-only deploys) — bootstrap with scripts/bootstrap.sh
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
